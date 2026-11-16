@@ -1,10 +1,10 @@
-import Mathlib
+import HistFactory.Trusted
 
 namespace HistFactory
 
 class Number (K : Type) extends Add K, Sub K, Mul K, Div K, Neg K, Zero K, One K, NatCast K,
     OfScientific K, LT K, LE K where
-  npow : K → ℕ → K
+  npow : K → Nat → K
   rpow : K → K → K
   decLT : DecidableLT K
   decLE : DecidableLE K
@@ -17,9 +17,10 @@ class Number (K : Type) extends Add K, Sub K, Mul K, Div K, Neg K, Zero K, One K
 
 open Number
 
-variable {K : Type} [Number K] {n : ℕ}
+variable {K : Type} [Number K] {n : Nat}
 
-scoped instance : HPow K ℕ K := ⟨npow⟩
+scoped instance (priority := low) {k : Nat} : OfNat K k := ⟨Nat.cast (OfNat.ofNat k)⟩
+scoped instance : HPow K Nat K := ⟨npow⟩
 scoped instance : HPow K K K := ⟨rpow⟩
 scoped instance : DecidableLT K := decLT
 scoped instance : DecidableLE K := decLE
@@ -93,7 +94,7 @@ def HistoInterp.eval : HistoInterp → K → K → K → K → K
   | .code2 => HistFactory.code2
   | .code4p => HistFactory.code4p
 
-inductive Modifier (K : Type) (n : ℕ)
+inductive Modifier (K : Type) (n : Nat)
   | normfactor (name : String)
   | shapefactor (name : String)
   | lumi (name : String) (nominal sigma : K)
@@ -102,14 +103,14 @@ inductive Modifier (K : Type) (n : ℕ)
   | shapesys (name : String) (unc : Fin n → K)
   | staterror (name : String) (unc : Fin n → K)
 
-structure Sample (K : Type) (n : ℕ) where
+structure Sample (K : Type) (n : Nat) where
   name : String
   data : Fin n → K
   modifiers : List (Modifier K n)
 
 structure Channel (K : Type) where
   name : String
-  bins : ℕ
+  bins : Nat
   samples : List (Sample K bins)
 
 structure Model (K : Type) where
@@ -117,7 +118,7 @@ structure Model (K : Type) where
   normsys : NormInterp := .code4
   histosys : HistoInterp := .code4p
 
-abbrev Table (K : Type) := String → ℕ → K
+abbrev Table (K : Type) := String → Nat → K
 
 def Table.ofList (rows : List (String × List K)) : Table K :=
   fun name i => ((rows.lookup name).getD []).getD i 0
@@ -159,10 +160,10 @@ def Channel.rate (c : Channel K) (N : NormInterp) (H : HistoInterp) (θ : Table 
   (c.samples.map (·.rate N H θ b)).sum
 
 inductive Constraint (K : Type)
-  | gaus (name : String) (index : ℕ) (observed width : K)
-  | pois (name : String) (index : ℕ) (tau : K)
+  | gaus (name : String) (index : Nat) (observed width : K)
+  | pois (name : String) (index : Nat) (tau : K)
 
-def Constraint.param : Constraint K → String × ℕ
+def Constraint.param : Constraint K → String × Nat
   | .gaus p i _ _ => (p, i)
   | .pois p i _ => (p, i)
 
@@ -213,7 +214,7 @@ inductive Kind
 
 structure ParamSet where
   name : String
-  size : ℕ
+  size : Nat
   kind : Kind
   deriving DecidableEq, Repr
 
@@ -230,7 +231,7 @@ def Model.paramSets (m : Model K) : List ParamSet :=
   firstBy ParamSet.name <|
     m.channels.flatMap fun c => c.samples.flatMap fun s => s.modifiers.map (·.paramSet)
 
-def Model.size (m : Model K) : ℕ :=
+def Model.size (m : Model K) : Nat :=
   (m.paramSets.map (·.size)).sum
 
 def Model.init (m : Model K) : Table K :=
