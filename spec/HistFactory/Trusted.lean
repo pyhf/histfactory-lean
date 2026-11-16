@@ -1,0 +1,3 @@
+namespace HistFactory
+
+end HistFactory
