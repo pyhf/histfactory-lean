@@ -78,5 +78,32 @@ def code4 (lo hi α : K) : K :=
 
 
 
+/-
+LH: there are two types of interpolation methods
+
+1) interpolators that are used for "multiplicative" modifiers (MultiplicativeInterp)
+2) interpolators that are used for "addtivive" modifiers (AdditiveModifierInterp)
+
+we define two sum types (types, where a value is one of the given options) to reflect this
+
+-/
+
+-- LH: the sum types
+inductive MultiplicativeInterp
+  | code1
+  | code4
+
+inductive AdditiveModifierInterp
+  | code0
+  | code4p
+
+-- LH: a dispatch function based on the value of the sum type to the interpolation function
+def MultiplicativeInterp.eval : MultiplicativeInterp → K → K → K → K
+  | .code1 => HistFactory.code1
+  | .code4 => HistFactory.code4
+
+def AdditiveModifierInterp.eval : AdditiveModifierInterp → K → K → K → K → K
+  | .code0 => HistFactory.code0
+  | .code4p => HistFactory.code4p
 
 end HistFactory
