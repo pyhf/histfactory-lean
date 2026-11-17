@@ -6,6 +6,13 @@ open Number
 variable {K : Type} [Number K]
 
 
+def code2 (lo nom hi α : K) : K :=
+  let a := (hi + lo) / 2 - nom
+  let b := (hi - lo) / 2
+  if α ≤ -1 then (lo - nom) + (b - 2 * a) * (α + 1)
+  else if α < 1 then a * α ^ 2 + b * α
+  else (hi - nom) + (b + 2 * a) * (α - 1)
+
 
 inductive NormInterp
   | code1

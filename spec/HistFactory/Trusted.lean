@@ -52,13 +52,6 @@ def code0 (lo nom hi α : K) : K :=
 def code1 (lo hi α : K) : K :=
   if α ≤ 0 then lo ^ (-α) else hi ^ α
 
-def code2 (lo nom hi α : K) : K :=
-  let a := (hi + lo) / 2 - nom
-  let b := (hi - lo) / 2
-  if α ≤ -1 then (lo - nom) + (b - 2 * a) * (α + 1)
-  else if α < 1 then a * α ^ 2 + b * α
-  else (hi - nom) + (b + 2 * a) * (α - 1)
-
 def code4p (lo nom hi α : K) : K :=
   let S := ((hi - nom) + (nom - lo)) / 2
   let A := ((hi - nom) - (nom - lo)) / 16
