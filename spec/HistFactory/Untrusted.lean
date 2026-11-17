@@ -3,8 +3,7 @@ import HistFactory.Trusted
 namespace HistFactory
 
 open Number
-variable {K : Type} [Number K]
-
+variable {K : Type} [Number K] {n : Nat}
 
 def code2 (lo nom hi α : K) : K :=
   let a := (hi + lo) / 2 - nom
@@ -12,27 +11,6 @@ def code2 (lo nom hi α : K) : K :=
   if α ≤ -1 then (lo - nom) + (b - 2 * a) * (α + 1)
   else if α < 1 then a * α ^ 2 + b * α
   else (hi - nom) + (b + 2 * a) * (α - 1)
-
-
-inductive NormInterp
-  | code1
-  | code4
-  deriving DecidableEq, Repr
-
-inductive HistoInterp
-  | code0
-  | code2
-  | code4p
-  deriving DecidableEq, Repr
-
-def NormInterp.eval : NormInterp → K → K → K → K
-  | .code1 => HistFactory.code1
-  | .code4 => HistFactory.code4
-
-def HistoInterp.eval : HistoInterp → K → K → K → K → K
-  | .code0 => HistFactory.code0
-  | .code2 => HistFactory.code2
-  | .code4p => HistFactory.code4p
 
 inductive Modifier (K : Type) (n : Nat)
   | normfactor (name : String)
@@ -55,8 +33,8 @@ structure Channel (K : Type) where
 
 structure Model (K : Type) where
   channels : List (Channel K)
-  normsys : NormInterp := .code4
-  histosys : HistoInterp := .code4p
+  normsys : MultiplicativeInterp := .code4
+  histosys : AdditiveModifierInterp := .code4p
 
 abbrev Table (K : Type) := String → Nat → K
 
@@ -76,7 +54,7 @@ def Modifier.name : Modifier K n → String
   | .shapesys p _ => p
   | .staterror p _ => p
 
-def Modifier.factor (I : NormInterp) (θ : Table K) (b : Fin n) : Modifier K n → K
+def Modifier.factor (I : MultiplicativeInterp) (θ : Table K) (b : Fin n) : Modifier K n → K
   | .normfactor p => θ p 0
   | .shapefactor p => θ p b
   | .lumi p _ _ => θ p 0
@@ -85,17 +63,17 @@ def Modifier.factor (I : NormInterp) (θ : Table K) (b : Fin n) : Modifier K n �
   | .shapesys p _ => θ p b
   | .staterror p _ => θ p b
 
-def Modifier.shift (I : HistoInterp) (θ : Table K) (nom : Fin n → K) (b : Fin n) :
+def Modifier.shift (I : AdditiveModifierInterp) (θ : Table K) (nom : Fin n → K) (b : Fin n) :
     Modifier K n → K
   | .histosys p lo hi => I.eval (lo b) (nom b) (hi b) (θ p 0)
   | _ => 0
 
-def Sample.rate (s : Sample K n) (N : NormInterp) (H : HistoInterp) (θ : Table K)
+def Sample.rate (s : Sample K n) (N : MultiplicativeInterp) (H : AdditiveModifierInterp) (θ : Table K)
     (b : Fin n) : K :=
   (s.data b + (s.modifiers.map (·.shift H θ s.data b)).sum)
     * (s.modifiers.map (·.factor N θ b)).prod
 
-def Channel.rate (c : Channel K) (N : NormInterp) (H : HistoInterp) (θ : Table K)
+def Channel.rate (c : Channel K) (N : MultiplicativeInterp) (H : AdditiveModifierInterp) (θ : Table K)
     (b : Fin c.bins) : K :=
   (c.samples.map (·.rate N H θ b)).sum
 
