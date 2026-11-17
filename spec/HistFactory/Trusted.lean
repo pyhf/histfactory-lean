@@ -97,7 +97,9 @@ inductive AdditiveModifierInterp
   | code0
   | code4p
 
--- LH: a dispatch function based on the value of the sum type to the interpolation function
+/-
+LH: a dispatch function based on the value of the sum type to the interpolation function
+-/
 def MultiplicativeInterp.eval : MultiplicativeInterp → K → K → K → K
   | .code1 => HistFactory.code1
   | .code4 => HistFactory.code4
@@ -105,5 +107,72 @@ def MultiplicativeInterp.eval : MultiplicativeInterp → K → K → K → K
 def AdditiveModifierInterp.eval : AdditiveModifierInterp → K → K → K → K → K
   | .code0 => HistFactory.code0
   | .code4p => HistFactory.code4p
+
+
+/-
+LH: the bin modification effect type is parametrized by both the scalar type and
+a size n. There are seven known modifications
+
+Some modifiers
+* take vector-like data (histosys/shapesys/staterror)
+* take only scalar data (normsys / lumi)
+* take no data at all (normfactor, shapefactor)
+
+-/
+
+inductive Effect (K : Type) (n : Nat)
+  | normfactor
+  | shapefactor
+  | lumi (nominal sigma : K)
+  | normsys (lo hi : K) (interp : MultiplicativeInterp := .code4)
+  | histosys (lo hi : Fin n → K) (interp : AdditiveModifierInterp := .code4p)
+  | shapesys (unc : Fin n → K)
+  | staterror (unc : Fin n → K)
+
+/-
+
+LH: A Modifier type parametrized by scalar type and size n
+It is a pair of a string name and an effect
+* the string name refers to parameter set that controls the effect
+* the effect is on of the modification functions above
+
+-/
+
+structure Modifier (K : Type) (n : Nat) where
+  parameset : String
+  effect : Effect K n
+
+
+/-
+
+LH: A Sample type parametrized by scalar type and size n
+
+-/
+
+structure Sample (K : Type) (n : Nat) where
+  name : String
+  nominal : Fin n → K
+  modifiers : List (Modifier K n)
+
+
+/-
+
+LH: The Channel and Model types
+
+Note that deliberately Channel is not parametetrized
+by the size.. since a overall model is a list of
+potentially differently sized channels
+
+-/
+
+structure Channel (K : Type) where
+  name : String
+  bins : Nat
+  samples : List (Sample K bins)
+
+
+structure Model (K : Type) where
+  channels : List (Channel K)
+
 
 end HistFactory
