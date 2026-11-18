@@ -23,6 +23,9 @@ open Number
 -- LH: add implicit and and instance parameters to all defs automatically
 variable {K : Type} [Number K] {n : Nat}
 
+-- LH: a simple table type for string-indexed vectors (think: table["name"][index])
+abbrev Table (K : Type) := String → Nat → K
+
 -- LH: make symbols ^, <, <= refer to Number's methods npow, rpow, <, <=
 scoped instance (priority := low) {k : Nat} : OfNat K k := ⟨Nat.cast (OfNat.ofNat k)⟩
 scoped instance : HPow K Nat K := ⟨npow⟩
@@ -109,6 +112,93 @@ def AdditiveModifierInterp.eval : AdditiveModifierInterp → K → K → K → K
   | .code4p => HistFactory.code4p
 
 
+
+/-
+1. LH: The parameter model for HistFactory
+========================================
+
+* There are two types of parameter sets (scalars and vectors) -> shape
+* Parameters have nominal parameers values (init) and a range (bounds)
+* some parameters come with a constraint term
+* whether the parameter set may be bound to multiple effects (sharing)
+
+-/
+
+structure ParameterTable (K : Type) where
+  values : Table K
+
+
+inductive Shape
+  | scalar
+  | perBin
+
+def Shape.size (s : Shape) (n : Nat) : Nat :=
+  match s with
+  | .scalar => 1
+  | .perBin => n
+
+def Shape.index (s : Shape) (b : Fin n) : Nat :=
+  match s with
+  | .scalar => 0
+  | .perBin => b
+
+/-
+LH: the three options of how a parameter can be shared
+
+* for ordinary systematics any sample in any channel can bind a modifier to it
+* for shapesys the situation is more complicated since the constraint term / width
+  depends on the data passed in the sample, so it cannot be shared / it's unique per sample (oneSample)
+* for staterror, multiple samples of the same can participate in it (they'll jointly get varied according to barlow beaston)
+
+-/
+
+inductive Sharing
+  | anywhere
+  | oneChannel
+  | oneSample
+
+/-
+LH: the constraint model with a few options
+
+The mcStat and Poisson consstraints are "vector constraints"
+where the constraint parameters are passed as lookup functions
+indexed by the channel size n
+
+-/
+
+inductive ConstraintSpec (K : Type) (n : Nat)
+  | free
+  | normal (aux sigma : K)
+  | mcStat (unc : Fin n → K)
+  | poisson (tau : Fin n → K)
+
+
+structure ParamSpec (K : Type) (n : Nat) where
+  shape : Shape
+  sharing : Sharing
+  init : K
+  bounds : K × K
+  constraint : ConstraintSpec K n
+
+
+/-
+2. LH: The modifier model of HistFactory
+========================================
+
+
+the implemenattion of the known effects
+
+each fully defines
+* required parameter set
+* its concrete modification to the bin
+
+-/
+
+inductive Modification (K : Type)
+  | times (factor : K)
+  | plus (shift : K)
+
+
 /-
 LH: the bin modification effect type is parametrized by both the scalar type and
 a size n. There are seven known modifications
@@ -143,10 +233,60 @@ structure Modifier (K : Type) (n : Nat) where
   effect : Effect K n
 
 
+structure EffectSpec (K : Type) (n : Nat) where
+  paramspec : ParamSpec K n
+  modification : (b : Fin n) → (x : K) → Modification K
+
+def Effect.spec (nom : Fin n → K) : Effect K n → EffectSpec K n
+  | .normfactor =>
+    { paramspec :=⟨.scalar, .anywhere, 1, (0, 10), .free⟩
+      modification := fun _ θ => .times θ }
+  | .shapefactor =>
+    { paramspec :=⟨.perBin, .anywhere, 1, (0, 10), .free⟩
+      modification := fun _ θ_b => .times θ_b }
+  | .lumi nominal sigma =>
+    { paramspec :=⟨.scalar, .anywhere, nominal, (0, 10 * nominal), .normal nominal sigma⟩
+      modification := fun _ θ => .times θ }
+  | .normsys lo hi I =>
+    { paramspec :=⟨.scalar, .anywhere, 0, (-5, 5), .normal 0 1⟩
+      modification := fun _ θ => .times (I.eval lo hi θ) }
+  | .histosys lo hi I =>
+    { paramspec :=⟨.scalar, .anywhere, 0, (-5, 5), .normal 0 1⟩
+      modification := fun b θ => .plus (I.eval (lo b) (nom b) (hi b) θ) }
+  | .shapesys unc =>
+    { paramspec :=⟨.perBin, .oneSample, 1, (1e-10, 10), .poisson fun b => (nom b / unc b) ^ 2⟩
+      modification := fun _ θ_b => .times θ_b }
+  | .staterror unc =>
+    { paramspec :=⟨.perBin, .oneChannel, 1, (1e-10, 10), .mcStat unc⟩
+      modification := fun _ θ_b => .times θ_b }
+
+
+/-
+LH:
+
+* for each modifier we can produce a concrete modification given the bin and parameter value
+
+* to compute the full rate for a sample we collect all shift modifications and all factor modifications
+  and first apply the shifts and then factors
+
+* the overall rate of a channel at some bin is the sum of the sample rates
+
+-/
+
+def Modifier.modification (θ : ParameterTable K) (nom : Fin n → K) (b : Fin n)
+    (m : Modifier K n) : Modification K :=
+  let spec := m.effect.spec nom
+  let paramvalue := θ.values m.parameset (spec.paramspec.shape.index b)
+  spec.modification b paramvalue
+
+
 /-
 
-LH: A Sample type parametrized by scalar type and size n
+3. LH: The overall main likelihood model of Histfactory
+========================================
 
+
+A Sample type parametrized by scalar type and size n
 -/
 
 structure Sample (K : Type) (n : Nat) where
@@ -173,6 +313,16 @@ structure Channel (K : Type) where
 
 structure Model (K : Type) where
   channels : List (Channel K)
+
+
+def Sample.rate (s : Sample K n) (θ : ParameterTable K) (b : Fin n) : K :=
+  let modifications := s.modifiers.map (·.modification θ s.nominal b)
+  let shifts := modifications.filterMap fun | .plus x => some x | .times _ => none
+  let factors := modifications.filterMap fun | .times x => some x | .plus _ => none
+  (s.nominal b + shifts.sum) * factors.prod
+
+def Channel.rate (c : Channel K) (θ : ParameterTable K) (b : Fin c.bins) : K :=
+  (c.samples.map (·.rate θ b)).sum
 
 
 end HistFactory
